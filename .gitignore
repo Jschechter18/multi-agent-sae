@@ -1,0 +1,27 @@
+# Data
+/data
+/data*
+
+# vsCode
+.vscode
+/.vscode
+.vscode/*
+
+# Python core bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Testing and coverage caches
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Linter and type checker caches
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
