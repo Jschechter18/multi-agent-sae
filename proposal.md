@@ -407,63 +407,49 @@
 
             TECHNICAL CHALLENGES AND SOLUTIONS:
 
-            1. The LLM Judge Scoring Steering Faithfulness Could Itself Be Unreliable:
-            - ISSUE: If the judge's faithfulness scores are noisy or biased, the entire benchmark inherits
-              that noise
-            - SOLUTION: Week 6 validates the judge against a human-rated subsample before trusting it for the
-              full sweep, and Week 14 re-validates it with an independent human audit, reporting the
-              human-judge correlation explicitly rather than assuming it
+            1. Parametric Knowledge May Allow the Model to Answer Without Retrieved Evidence:
+            - ISSUE: Because MuSiQue questions are based on factual information, the underlying LLM may already know some answers from pretraining. If a required evidence passage is removed, the model could still answer correctly from memory rather than from the retrieved evidence.
+            - SOLUTION: Run a separate closed-book diagnostic in which the same question is presented without retrieved context and the model is allowed to answer from internal knowledge. Questions answered correctly closed-book will be flagged and analyzed separately rather than automatically treated as evidence-grounded successes. During the actual RAG experiments, agents will be instructed to answer only from the provided evidence and log the evidence IDs supporting their answers so unsupported responses can be identified even when the final answer happens to be factually correct.
 
-            2. Comparing Unsupervised SAE Latents to Supervised Probes Is an Apples-to-Oranges Design by
-               Construction:
-            - ISSUE: Probes are trained directly on the target concept while SAE latents are discovered
-              unsupervised, which could look like an unfair comparison
-            - SOLUTION: This asymmetry is the entire research question, not a confound to remove -- SAEs are
-              evaluated exactly as they are used in practice (unsupervised, then labeled post-hoc) against
-              probes exactly as they are used in practice (supervised), and the paper states this explicitly
-              as the studied factor rather than a nuisance variable
+            2. Missing-Evidence Examples May Still Be Answerable:
+            - ISSUE: Removing one supporting passage or reasoning hop may not actually make a question unsupported. Remaining passages, distractors, or indirect clues may still provide enough information to derive the answer.
+            - SOLUTION: Validate the evidence-removal procedure on a development subset before the main experiment. Confirm that the removed information is necessary for completing the reasoning chain and record the evidence-removal strategy for each example.
 
-            3. SAE Labels May Simply Be Faithful (Null Result):
-            - ISSUE: The central hypothesis (H1) could fail to hold -- auto-interp labels might already be
-              reliably faithful, with no gap to report
-            - SOLUTION: A null result is a valid, reportable, and publishable finding (it would validate the
-              auto-interp pipeline the field already relies on); the paper narrative and analysis pipeline are
-              designed from Week 1 to accommodate either outcome
+            3. Appropriate Abstention May Be Difficult to Measure Reliably:
+            - ISSUE: Models may express uncertainty in many different ways rather than returning a standardized abstention response, making automated evaluation inconsistent.
+            - SOLUTION: Use a structured output format requiring every agent to return both its answer and an explicit answer-or-abstain decision. Validate automated abstention scoring against a manually reviewed subset before applying it to the full evaluation.
 
-            4. Steering Effects Can Be Context- or Magnitude-Dependent:
-            - ISSUE: A latent might faithfully produce its labeled behavior at one clamping magnitude or
-              prompt but not another, complicating a single faithfulness score per latent
-            - SOLUTION: Sweep a fixed magnitude grid and a fixed prompt set per latent (Week 5), and report
-              faithfulness as a curve over magnitude rather than collapsing prematurely to one number
+            4. Multiple Agents May Produce Correlated Unsupported Answers:
+            - ISSUE: Adding more agents does not guarantee independent verification. Agents using the same model, prompts, and incomplete evidence may produce the same unsupported answer, creating false consensus.
+            - SOLUTION: Record every agent's response before aggregation or communication and measure agreement and disagreement at the agent level. Compare the frequency of false consensus across critique-based, independent-agent, and interactive architectures.
 
-            5. From-Scratch SAE Training May Not Match Published Reconstruction/Sparsity Numbers:
-            - ISSUE: A poorly trained from-scratch SAE would contaminate the Week 2 architecture-comparison
-              arm (H4)
-            - SOLUTION: Week 2 validates reconstruction loss and L0 sparsity against published reference
-              numbers before any from-scratch SAE is used in later phases; pretrained SAEs (Tier 1a/1b) are
-              used for every other analysis so H4 is the only arm depending on from-scratch training quality
+            5. Agent Communication May Reinforce Rather Than Correct Errors:
+            - ISSUE: In interactive architectures, an unsupported answer from one agent may influence other agents during discussion or debate, causing the group to converge on an answer that is not supported by the available evidence.
+            - SOLUTION: Store agent responses before and after communication. Measure whether initially abstaining or disagreeing agents move toward an unsupported answer after interaction and compare these transitions across communication strategies.
 
-            6. Total Run Count Across the Full Sweep:
-            - ISSUE: 2 models x multiple layers x 3-4 SAE architectures x hundreds of latents x a steering-
-              magnitude grid x a probe baseline could balloon the compute and annotation budget
-            - SOLUTION: The full run matrix is enumerated in run_matrix.csv in Week 1 so the total is
-              bounded and auditable before any runs begin; the architecture comparison (H4) is restricted to
-              one GPT-2-small layer rather than the full model
+            6. Architecture Comparisons May Be Confounded by Unequal Compute:
+            - ISSUE: Multi-agent architectures naturally require more model calls, tokens, and inference time than the single-agent baseline. Any performance improvement could therefore result from additional inference effort rather than the architecture itself.
+            - SOLUTION: Keep the underlying model, retrieval inputs, temperature, dataset examples, and other applicable settings consistent across architectures. Report model-call count, token usage, and latency alongside accuracy, abstention, and false-consensus metrics.
 
-            7. Library / Version Drift:
-            - ISSUE: TransformerLens, SAELens, and the Gemma Scope checkpoints are all actively maintained;
-              API changes could break reproducibility mid-semester
-            - SOLUTION: Pin all dependency versions in requirements.txt from Week 1
+            7. Experimental Run Count May Exceed the Available Semester Budget:
+            - ISSUE: Testing several architectures, evidence-removal strategies, agent counts, random seeds, and models could produce more experimental runs than can reasonably be completed during the semester.
+            - SOLUTION: Define and freeze the primary experiment matrix before the main evaluation. Prioritize one primary model, a fixed MuSiQue subset, clean and missing-evidence conditions, and the core architecture comparisons. Additional models and ablations will be extensions if time and compute permit.
+
+            8. Library, Dataset, and Model Version Drift May Affect Reproducibility:
+            - ISSUE: Changes to dataset, transformer, retrieval, or agent-framework libraries during the semester could alter experimental behavior or break the pipeline.
+            - SOLUTION: Pin tested dependency versions, record model and dataset revisions, use fixed random seeds, save prompts and experiment configurations, and cache the finalized evaluation dataset used for the main experiments.
+
+            9. The Backbone Model May Not Reliably Perform Specialized Agent Roles:
+            - ISSUE: The selected model may not faithfully perform critic, debater, verifier, or aggregation roles. For example, a critic may always agree with the solver or debate agents may never meaningfully revise their answers, causing architectures to appear equivalent for the wrong reason.
+            - SOLUTION: Measure critic-agreement rate, answer-change rate, role-compliance rate, and non-convergence on the development subset before the main experiment. Cap interaction rounds with an explicit stopping rule and report these diagnostics alongside the primary metrics. If specialized verification behavior is weak at the selected model scale, that will be reported as a limitation or finding rather than silently treated as evidence that architectures are equivalent.
 
             RISK MITIGATION TIMELINE:
-            - Weeks 1-3:  Verify pretrained-SAE reconstruction quality and from-scratch SAE training against
-                          published reference numbers before the main labeling/steering sweep begins
-            - Weeks 4-11: Monitor per-model/layer run completion and intermediate faithfulness scores as each
-                          phase comes online; checkpoint intermediate results after every phase
-            - Weeks 12-13: Cross-check held-out Tier 4 results against the Tiers 1-3 findings for consistency
-                          before finalizing H1-H4
-            - Week 14:    Independent human audit of the LLM-judge faithfulness scores by both students
-            - Weeks 15-16: 3-day code freeze for README and notebook review before public release
+            - Early setup: Validate MuSiQue structure, the missing-evidence construction process, the closed-book diagnostic, and the standardized evaluation schema.
+            - Baseline development: Validate the single-agent pipeline and confirm that missing-evidence examples genuinely test insufficient support and abstention.
+            - Multi-agent development: Validate each architecture on a development subset and inspect agent-level logs for correlated errors, false consensus, role compliance, and malformed outputs.
+            - Main experiments: Monitor run completion, model-call counts, token usage, latency, and failed runs while preserving intermediate outputs.
+            - Final analysis: Perform statistical comparisons and manual error analysis to verify that measured abstention and false consensus reflect genuine system behavior rather than evaluation artifacts.
+            - Final repository freeze: Pin tested dependencies, dataset revisions, model configurations, prompts, and experiment outputs needed for reproducibility.
             
 
 
